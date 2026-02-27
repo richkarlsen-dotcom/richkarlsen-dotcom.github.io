@@ -5,6 +5,7 @@ Then open: http://localhost:5000
 """
 
 import io
+import os
 from datetime import datetime
 import requests
 import openpyxl
@@ -126,4 +127,4 @@ if __name__ == "__main__":
         load_data()
     except Exception as e:
         print(f"Warning: could not pre-load data – {e}")
-    app.run(debug=True, port=5000)
+    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
