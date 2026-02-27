@@ -1,0 +1,525 @@
+<!DOCTYPE html>
+<html lang="da">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Skat Positivliste – ISIN Opslag</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500&display=swap');
+
+    :root {
+      --bg: #f5f0e8;
+      --surface: #fffdf8;
+      --border: #d4c9b0;
+      --text: #1a1612;
+      --muted: #7a7265;
+      --accent: #c84b2f;
+      --accent-soft: #f2ddd8;
+      --green: #2d6a4f;
+      --green-soft: #d8ede5;
+      --shadow: 0 1px 3px rgba(26,22,18,0.08), 0 4px 16px rgba(26,22,18,0.06);
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'DM Sans', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      padding: 0 1rem;
+    }
+
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.04'/%3E%3C/svg%3E");
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    .container {
+      position: relative;
+      z-index: 1;
+      max-width: 780px;
+      margin: 0 auto;
+      padding: 3rem 0 4rem;
+    }
+
+    header { margin-bottom: 2.5rem; }
+
+    .eyebrow {
+      font-family: 'DM Mono', monospace;
+      font-size: 0.7rem;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: var(--accent);
+      margin-bottom: 0.6rem;
+    }
+
+    h1 {
+      font-family: 'DM Serif Display', serif;
+      font-size: clamp(2rem, 5vw, 3rem);
+      line-height: 1.1;
+      color: var(--text);
+      margin-bottom: 0.75rem;
+    }
+
+    h1 em { font-style: italic; color: var(--accent); }
+
+    .subtitle {
+      font-size: 0.9rem;
+      color: var(--muted);
+      line-height: 1.6;
+      max-width: 480px;
+    }
+
+    .data-status {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      margin-top: 1rem;
+      font-family: 'DM Mono', monospace;
+      font-size: 0.72rem;
+      color: var(--muted);
+    }
+
+    .dot {
+      width: 7px; height: 7px;
+      border-radius: 50%;
+      background: var(--border);
+      flex-shrink: 0;
+      transition: background 0.3s;
+    }
+    .dot.loading { background: #e8a82a; animation: pulse 1s infinite; }
+    .dot.ready   { background: var(--green); }
+    .dot.error   { background: var(--accent); }
+
+    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
+
+    .search-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 2rem;
+      box-shadow: var(--shadow);
+      margin-bottom: 1.5rem;
+    }
+
+    label {
+      display: block;
+      font-size: 0.78rem;
+      font-family: 'DM Mono', monospace;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-bottom: 0.6rem;
+    }
+
+    .input-row { display: flex; gap: 0.75rem; }
+
+    input[type="text"] {
+      flex: 1;
+      font-family: 'DM Mono', monospace;
+      font-size: 1rem;
+      padding: 0.75rem 1rem;
+      border: 1.5px solid var(--border);
+      border-radius: 8px;
+      background: var(--bg);
+      color: var(--text);
+      outline: none;
+      transition: border-color 0.2s, box-shadow 0.2s;
+      letter-spacing: 0.04em;
+    }
+
+    input[type="text"]:focus {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px var(--accent-soft);
+    }
+
+    input[type="text"]::placeholder { color: var(--border); }
+
+    button {
+      font-family: 'DM Sans', sans-serif;
+      font-weight: 500;
+      font-size: 0.9rem;
+      padding: 0.75rem 1.5rem;
+      background: var(--accent);
+      color: #fff;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: background 0.15s, transform 0.1s;
+      white-space: nowrap;
+    }
+
+    button:hover { background: #a83a21; }
+    button:active { transform: scale(0.98); }
+
+    .hint { margin-top: 0.6rem; font-size: 0.75rem; color: var(--muted); }
+
+    #results { min-height: 40px; }
+
+    /* Result card */
+    .result-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      overflow: hidden;
+      box-shadow: var(--shadow);
+      animation: fadeUp 0.3s ease;
+    }
+
+    @keyframes fadeUp {
+      from { opacity: 0; transform: translateY(10px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    .result-header {
+      background: var(--green-soft);
+      border-bottom: 1px solid var(--border);
+      padding: 1.25rem 1.75rem;
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+    }
+
+    .checkmark {
+      width: 28px; height: 28px;
+      background: var(--green);
+      border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0;
+    }
+
+    .checkmark svg { width: 14px; height: 14px; stroke: #fff; fill: none; stroke-width: 2.5; }
+
+    .result-header-text .fund-name {
+      font-family: 'DM Serif Display', serif;
+      font-size: 1.15rem;
+      color: var(--text);
+      line-height: 1.2;
+    }
+
+    .result-header-text .on-list {
+      font-size: 0.75rem;
+      color: var(--green);
+      font-weight: 500;
+      margin-top: 0.2rem;
+    }
+
+    .fields {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+    }
+
+    .field {
+      padding: 1rem 1.75rem;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .field:nth-child(odd)  { border-right: 1px solid var(--border); }
+    /* Remove bottom border from last row */
+    .field:last-child { border-bottom: none; }
+    .field:nth-last-child(2):nth-child(odd) { border-bottom: none; }
+
+    .field-label {
+      font-family: 'DM Mono', monospace;
+      font-size: 0.65rem;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-bottom: 0.3rem;
+    }
+
+    .field-value { font-size: 0.9rem; color: var(--text); word-break: break-word; }
+    .field-value.mono { font-family: 'DM Mono', monospace; font-size: 0.85rem; }
+
+    /* Multi-match table */
+    .multi-result {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      overflow: hidden;
+      box-shadow: var(--shadow);
+      animation: fadeUp 0.3s ease;
+    }
+
+    .multi-header {
+      padding: 1rem 1.5rem;
+      border-bottom: 1px solid var(--border);
+      background: #fef9f0;
+      font-size: 0.8rem;
+      color: var(--muted);
+    }
+
+    .multi-header strong { color: var(--text); }
+
+    table { width: 100%; border-collapse: collapse; font-size: 0.82rem; }
+
+    th {
+      font-family: 'DM Mono', monospace;
+      font-size: 0.63rem;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--muted);
+      padding: 0.75rem 1rem;
+      text-align: left;
+      border-bottom: 1px solid var(--border);
+      background: var(--bg);
+    }
+
+    td { padding: 0.7rem 1rem; border-bottom: 1px solid var(--border); color: var(--text); }
+    tr:last-child td { border-bottom: none; }
+    tr:hover td { background: var(--bg); }
+
+    /* Not found */
+    .not-found {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-left: 3px solid var(--accent);
+      border-radius: 12px;
+      padding: 1.5rem 1.75rem;
+      animation: fadeUp 0.3s ease;
+    }
+
+    .not-found .nf-title {
+      font-family: 'DM Serif Display', serif;
+      font-size: 1.1rem;
+      margin-bottom: 0.4rem;
+    }
+
+    .not-found .nf-sub { font-size: 0.82rem; color: var(--muted); line-height: 1.5; }
+
+    /* Error */
+    .error-msg {
+      background: var(--accent-soft);
+      border: 1px solid #e8b4aa;
+      border-radius: 12px;
+      padding: 1.25rem 1.5rem;
+      font-size: 0.85rem;
+      color: var(--accent);
+      animation: fadeUp 0.3s ease;
+    }
+
+    /* Loading */
+    .spinner-wrap {
+      display: flex; align-items: center; gap: 0.75rem;
+      padding: 1.5rem 0; color: var(--muted); font-size: 0.85rem;
+    }
+
+    .spinner {
+      width: 20px; height: 20px;
+      border: 2px solid var(--border);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+    }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    footer {
+      margin-top: 3rem;
+      padding-top: 1.5rem;
+      border-top: 1px solid var(--border);
+      font-size: 0.75rem;
+      color: var(--muted);
+      line-height: 1.6;
+    }
+
+    footer a { color: var(--accent); text-decoration: none; }
+    footer a:hover { text-decoration: underline; }
+
+    @media (max-width: 520px) {
+      .input-row { flex-direction: column; }
+      .fields { grid-template-columns: 1fr; }
+      .field:nth-child(odd) { border-right: none; }
+      .field:nth-last-child(2):nth-child(odd) { border-bottom: 1px solid var(--border); }
+    }
+  </style>
+</head>
+<body>
+<div class="container">
+  <header>
+    <p class="eyebrow">Skat.dk · Positivlisten</p>
+    <h1>ISIN <em>Opslag</em></h1>
+    <p class="subtitle">Søg efter en fond på Skats positivliste (ABL § 19 / § 22) ved at indtaste dens ISIN-nummer.</p>
+    <div class="data-status">
+      <div class="dot ready" id="statusDot"></div>
+      <span id="statusText">Klar — data hentes ved søgning</span>
+    </div>
+  </header>
+
+  <div class="search-card">
+    <label for="isinInput">ISIN-nummer</label>
+    <div class="input-row">
+      <input type="text" id="isinInput" placeholder="f.eks. DK0060336014" maxlength="12"
+             autocomplete="off" spellcheck="false" />
+      <button id="searchBtn" onclick="doSearch()">Søg</button>
+    </div>
+    <p class="hint">ISIN er 12 tegn langt (landekode + 10 cifre/bogstaver)</p>
+  </div>
+
+  <div id="results"></div>
+
+  <footer>
+    Data fra <a href="https://skat.dk/erhverv/investeringsforeninger/investeringsforeninger/skat-positivliste" target="_blank">Skat.dk Positivlisten</a> ·
+    Februar 2026 · Kun til vejledende brug. Kontrollér altid hos Skat.
+  </footer>
+</div>
+
+<script>
+  async function doSearch() {
+    const isin = document.getElementById('isinInput').value.trim().toUpperCase();
+    const out  = document.getElementById('results');
+    const btn  = document.getElementById('searchBtn');
+
+    if (!isin) { out.innerHTML = ''; return; }
+
+    // Show spinner
+    out.innerHTML = `<div class="spinner-wrap"><div class="spinner"></div> Søger…</div>`;
+    btn.disabled = true;
+    setStatus('loading', 'Henter data…');
+
+    try {
+      const resp = await fetch(`/api/search?isin=${encodeURIComponent(isin)}`);
+      const data = await resp.json();
+
+      if (!resp.ok) throw new Error(data.error || 'Ukendt fejl');
+
+      setStatus('ready', `Positivliste klar · ${data.total_rows.toLocaleString('da-DK')} fonde`);
+
+      if (data.matches.length === 0) {
+        out.innerHTML = `
+          <div class="not-found">
+            <div class="nf-title">Ingen fond fundet</div>
+            <div class="nf-sub">
+              ISIN <strong>${isin}</strong> er ikke på Skats positivliste (februar 2026).<br>
+              Kontrollér at ISIN-nummeret er korrekt og 12 tegn langt.
+            </div>
+          </div>`;
+      } else if (data.matches.length === 1) {
+        out.innerHTML = buildSingleCard(data.headers, data.matches[0], isin);
+      } else {
+        out.innerHTML = buildMultiTable(data.headers, data.matches, isin);
+      }
+
+    } catch (e) {
+      setStatus('error', 'Fejl ved søgning');
+      out.innerHTML = `<div class="error-msg">⚠️ ${e.message}</div>`;
+    } finally {
+      btn.disabled = false;
+    }
+  }
+
+  // ---- Rendering helpers ----
+
+  function findCol(headers, keywords) {
+    return headers.findIndex(h =>
+      keywords.some(k => h.toLowerCase().includes(k))
+    );
+  }
+
+  function buildSingleCard(headers, row, isin) {
+    const isinCol     = findCol(headers, ['isin']);
+    const nameCol     = findCol(headers, ['navn', 'name', 'fond', 'fund', 'selskab']);
+    const countryCol  = findCol(headers, ['land', 'country']);
+    const typeCol     = findCol(headers, ['type', 'kategori', 'category', 'klasse']);
+    const currencyCol = findCol(headers, ['valuta', 'currency', 'mønt']);
+    const yearCol     = findCol(headers, ['år', 'year', 'gyldig', 'valid', 'periode', 'period']);
+
+    const priorityCols = [isinCol, nameCol, countryCol, typeCol, currencyCol, yearCol].filter(c => c > -1);
+    const fields = [];
+
+    const push = (col, label, mono = false) => {
+      if (col > -1 && row[col]) fields.push({ label, value: row[col], mono });
+    };
+
+    push(isinCol,     'ISIN',    true);
+    push(nameCol,     'Fondsnavn');
+    push(countryCol,  'Land');
+    push(typeCol,     'Type');
+    push(currencyCol, 'Valuta');
+    push(yearCol,     'Periode');
+
+    // Remaining non-empty columns
+    headers.forEach((h, i) => {
+      if (!priorityCols.includes(i) && row[i] && h) {
+        fields.push({ label: h, value: row[i] });
+      }
+    });
+
+    const fundName = (nameCol > -1 && row[nameCol]) ? row[nameCol] : isin;
+
+    const fieldHtml = fields.map(f => `
+      <div class="field">
+        <div class="field-label">${escHtml(f.label)}</div>
+        <div class="field-value ${f.mono ? 'mono' : ''}">${escHtml(f.value)}</div>
+      </div>`).join('');
+
+    return `
+      <div class="result-card">
+        <div class="result-header">
+          <div class="checkmark">
+            <svg viewBox="0 0 12 12"><polyline points="1.5,6 4.5,9 10.5,3"/></svg>
+          </div>
+          <div class="result-header-text">
+            <div class="fund-name">${escHtml(fundName)}</div>
+            <div class="on-list">✓ På Skats positivliste · Februar 2026</div>
+          </div>
+        </div>
+        <div class="fields">${fieldHtml}</div>
+      </div>`;
+  }
+
+  function buildMultiTable(headers, matches, isin) {
+    const usedCols = headers
+      .map((h, i) => ({ h, i }))
+      .filter(({ h, i }) => h && matches.some(r => r[i]));
+
+    const ths = usedCols.map(c => `<th>${escHtml(c.h)}</th>`).join('');
+    const trs = matches.map(row => {
+      const isinIdx = findCol(headers, ['isin']);
+      const tds = usedCols.map(c =>
+        `<td class="${c.i === isinIdx ? 'mono' : ''}">${escHtml(row[c.i] || '—')}</td>`
+      ).join('');
+      return `<tr>${tds}</tr>`;
+    }).join('');
+
+    return `
+      <div class="multi-result">
+        <div class="multi-header">
+          Fandt <strong>${matches.length} poster</strong> for ISIN ${escHtml(isin)} · alle på positivlisten
+        </div>
+        <div style="overflow-x:auto">
+          <table><thead><tr>${ths}</tr></thead><tbody>${trs}</tbody></table>
+        </div>
+      </div>`;
+  }
+
+  function escHtml(str) {
+    return String(str)
+      .replace(/&/g,'&amp;').replace(/</g,'&lt;')
+      .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+
+  function setStatus(state, text) {
+    document.getElementById('statusDot').className = 'dot ' + state;
+    document.getElementById('statusText').textContent = text;
+  }
+
+  // Enter key
+  document.getElementById('isinInput').addEventListener('keydown', e => {
+    if (e.key === 'Enter') doSearch();
+  });
+
+  // Auto-uppercase
+  document.getElementById('isinInput').addEventListener('input', e => {
+    const pos = e.target.selectionStart;
+    e.target.value = e.target.value.toUpperCase();
+    e.target.setSelectionRange(pos, pos);
+  });
+</script>
+</body>
+</html>
