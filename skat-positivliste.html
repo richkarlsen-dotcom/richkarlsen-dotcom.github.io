@@ -1,0 +1,581 @@
+<!DOCTYPE html>
+<html lang="da">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Skat Positivliste – ISIN Opslag</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500&display=swap');
+
+    :root {
+      --bg: #f5f0e8;
+      --surface: #fffdf8;
+      --border: #d4c9b0;
+      --text: #1a1612;
+      --muted: #7a7265;
+      --accent: #c84b2f;
+      --accent-soft: #f2ddd8;
+      --green: #2d6a4f;
+      --green-soft: #d8ede5;
+      --shadow: 0 1px 3px rgba(26,22,18,0.08), 0 4px 16px rgba(26,22,18,0.06);
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'DM Sans', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      padding: 0 1rem;
+    }
+
+    /* Subtle grain overlay */
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.04'/%3E%3C/svg%3E");
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    .container {
+      position: relative;
+      z-index: 1;
+      max-width: 780px;
+      margin: 0 auto;
+      padding: 3rem 0 4rem;
+    }
+
+    header {
+      margin-bottom: 2.5rem;
+    }
+
+    .eyebrow {
+      font-family: 'DM Mono', monospace;
+      font-size: 0.7rem;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: var(--accent);
+      margin-bottom: 0.6rem;
+    }
+
+    h1 {
+      font-family: 'DM Serif Display', serif;
+      font-size: clamp(2rem, 5vw, 3rem);
+      line-height: 1.1;
+      color: var(--text);
+      margin-bottom: 0.75rem;
+    }
+
+    h1 em {
+      font-style: italic;
+      color: var(--accent);
+    }
+
+    .subtitle {
+      font-size: 0.9rem;
+      color: var(--muted);
+      line-height: 1.6;
+      max-width: 480px;
+    }
+
+    /* Data source status */
+    .data-status {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      margin-top: 1rem;
+      font-family: 'DM Mono', monospace;
+      font-size: 0.72rem;
+      color: var(--muted);
+    }
+
+    .dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: var(--border);
+      flex-shrink: 0;
+      transition: background 0.3s;
+    }
+    .dot.loading { background: #e8a82a; animation: pulse 1s infinite; }
+    .dot.ready { background: var(--green); }
+    .dot.error { background: var(--accent); }
+
+    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
+
+    /* Search area */
+    .search-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 2rem;
+      box-shadow: var(--shadow);
+      margin-bottom: 1.5rem;
+    }
+
+    label {
+      display: block;
+      font-size: 0.78rem;
+      font-family: 'DM Mono', monospace;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-bottom: 0.6rem;
+    }
+
+    .input-row {
+      display: flex;
+      gap: 0.75rem;
+    }
+
+    input[type="text"] {
+      flex: 1;
+      font-family: 'DM Mono', monospace;
+      font-size: 1rem;
+      padding: 0.75rem 1rem;
+      border: 1.5px solid var(--border);
+      border-radius: 8px;
+      background: var(--bg);
+      color: var(--text);
+      outline: none;
+      transition: border-color 0.2s, box-shadow 0.2s;
+      letter-spacing: 0.04em;
+    }
+
+    input[type="text"]:focus {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px var(--accent-soft);
+    }
+
+    input[type="text"]::placeholder { color: var(--border); }
+
+    button {
+      font-family: 'DM Sans', sans-serif;
+      font-weight: 500;
+      font-size: 0.9rem;
+      padding: 0.75rem 1.5rem;
+      background: var(--accent);
+      color: #fff;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: background 0.15s, transform 0.1s;
+      white-space: nowrap;
+    }
+
+    button:hover { background: #a83a21; }
+    button:active { transform: scale(0.98); }
+    button:disabled { background: var(--border); cursor: not-allowed; }
+
+    .hint {
+      margin-top: 0.6rem;
+      font-size: 0.75rem;
+      color: var(--muted);
+    }
+
+    /* Results */
+    #results { min-height: 40px; }
+
+    .result-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      overflow: hidden;
+      box-shadow: var(--shadow);
+      animation: fadeUp 0.3s ease;
+    }
+
+    @keyframes fadeUp {
+      from { opacity: 0; transform: translateY(10px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    .result-header {
+      background: var(--green-soft);
+      border-bottom: 1px solid var(--border);
+      padding: 1.25rem 1.75rem;
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+    }
+
+    .checkmark {
+      width: 28px;
+      height: 28px;
+      background: var(--green);
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+
+    .checkmark svg { width: 14px; height: 14px; stroke: #fff; fill: none; stroke-width: 2.5; }
+
+    .result-header-text .fund-name {
+      font-family: 'DM Serif Display', serif;
+      font-size: 1.15rem;
+      color: var(--text);
+      line-height: 1.2;
+    }
+
+    .result-header-text .on-list {
+      font-size: 0.75rem;
+      color: var(--green);
+      font-weight: 500;
+      margin-top: 0.2rem;
+    }
+
+    .fields {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 0;
+    }
+
+    .field {
+      padding: 1rem 1.75rem;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .field:nth-child(odd) { border-right: 1px solid var(--border); }
+    .field:last-child, .field:nth-last-child(2):nth-child(odd) { border-bottom: none; }
+
+    .field-label {
+      font-family: 'DM Mono', monospace;
+      font-size: 0.65rem;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-bottom: 0.3rem;
+    }
+
+    .field-value {
+      font-size: 0.9rem;
+      color: var(--text);
+      word-break: break-word;
+    }
+
+    .field-value.mono {
+      font-family: 'DM Mono', monospace;
+      font-size: 0.85rem;
+    }
+
+    /* Multiple results */
+    .multi-result {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      overflow: hidden;
+      box-shadow: var(--shadow);
+      animation: fadeUp 0.3s ease;
+    }
+
+    .multi-header {
+      padding: 1rem 1.5rem;
+      border-bottom: 1px solid var(--border);
+      background: #fef9f0;
+      font-size: 0.8rem;
+      color: var(--muted);
+    }
+
+    .multi-header strong { color: var(--text); }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.82rem;
+    }
+
+    th {
+      font-family: 'DM Mono', monospace;
+      font-size: 0.63rem;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--muted);
+      padding: 0.75rem 1rem;
+      text-align: left;
+      border-bottom: 1px solid var(--border);
+      background: var(--bg);
+    }
+
+    td {
+      padding: 0.7rem 1rem;
+      border-bottom: 1px solid var(--border);
+      color: var(--text);
+    }
+
+    tr:last-child td { border-bottom: none; }
+    tr:hover td { background: var(--bg); }
+
+    /* Not found */
+    .not-found {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-left: 3px solid var(--accent);
+      border-radius: 12px;
+      padding: 1.5rem 1.75rem;
+      animation: fadeUp 0.3s ease;
+    }
+
+    .not-found .nf-title {
+      font-family: 'DM Serif Display', serif;
+      font-size: 1.1rem;
+      margin-bottom: 0.4rem;
+    }
+
+    .not-found .nf-sub {
+      font-size: 0.82rem;
+      color: var(--muted);
+      line-height: 1.5;
+    }
+
+    /* Error */
+    .error-msg {
+      background: var(--accent-soft);
+      border: 1px solid #e8b4aa;
+      border-radius: 12px;
+      padding: 1.25rem 1.5rem;
+      font-size: 0.85rem;
+      color: var(--accent);
+      animation: fadeUp 0.3s ease;
+    }
+
+    /* Loading spinner */
+    .spinner-wrap {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      padding: 1.5rem 0;
+      color: var(--muted);
+      font-size: 0.85rem;
+    }
+
+    .spinner {
+      width: 20px; height: 20px;
+      border: 2px solid var(--border);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+    }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    footer {
+      margin-top: 3rem;
+      padding-top: 1.5rem;
+      border-top: 1px solid var(--border);
+      font-size: 0.75rem;
+      color: var(--muted);
+      line-height: 1.6;
+    }
+
+    footer a { color: var(--accent); text-decoration: none; }
+    footer a:hover { text-decoration: underline; }
+
+    @media (max-width: 520px) {
+      .input-row { flex-direction: column; }
+      .fields { grid-template-columns: 1fr; }
+      .field:nth-child(odd) { border-right: none; }
+      .field:nth-last-child(2):nth-child(odd) { border-bottom: 1px solid var(--border); }
+    }
+  </style>
+</head>
+<body>
+<div class="container">
+  <header>
+    <p class="eyebrow">Skat.dk · Positivlisten</p>
+    <h1>ISIN <em>Opslag</em></h1>
+    <p class="subtitle">Søg efter en fond på Skats positivliste (ABL § 19 / § 22) ved at indtaste dens ISIN-nummer.</p>
+    <div class="data-status">
+      <div class="dot loading" id="statusDot"></div>
+      <span id="statusText">Henter positivliste-data fra Skat.dk…</span>
+    </div>
+  </header>
+
+  <div class="search-card">
+    <label for="isinInput">ISIN-nummer</label>
+    <div class="input-row">
+      <input type="text" id="isinInput" placeholder="f.eks. DK0060336014" maxlength="12" autocomplete="off" spellcheck="false" />
+      <button id="searchBtn" onclick="doSearch()" disabled>Søg</button>
+    </div>
+    <p class="hint">ISIN er 12 tegn langt (landekode + 10 cifre/bogstaver)</p>
+  </div>
+
+  <div id="results"></div>
+
+  <footer>
+    Data fra <a href="https://skat.dk/erhverv/investeringsforeninger/investeringsforeninger/skat-positivliste" target="_blank">Skat.dk Positivlisten</a> · 
+    Februar 2026 · Kun til vejledende brug. Kontrollér altid hos Skat.
+  </footer>
+</div>
+
+<script>
+  const XLSX_URL = 'https://skat.dk/media/btpf4wfr/februar-2026-abis-liste-2021-2026.xlsx';
+  let allRows = [];
+  let headers = [];
+
+  // --- Load Excel on page load ---
+  async function loadData() {
+    try {
+      const resp = await fetch(XLSX_URL);
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+      const arrayBuffer = await resp.arrayBuffer();
+      const wb = XLSX.read(arrayBuffer, { type: 'array' });
+
+      // Use first sheet
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      const raw = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
+
+      // Find header row (contains "ISIN" somewhere)
+      let headerIdx = 0;
+      for (let i = 0; i < Math.min(raw.length, 20); i++) {
+        const row = raw[i].map(c => String(c).toUpperCase());
+        if (row.some(c => c.includes('ISIN'))) { headerIdx = i; break; }
+      }
+
+      headers = raw[headerIdx].map(h => String(h).trim());
+      allRows = raw.slice(headerIdx + 1).filter(r => r.some(c => String(c).trim() !== ''));
+
+      setStatus('ready', `Positivliste klar · ${allRows.length.toLocaleString('da-DK')} fonde indlæst`);
+      document.getElementById('searchBtn').disabled = false;
+      document.getElementById('isinInput').focus();
+    } catch (e) {
+      setStatus('error', 'Kunne ikke hente data fra Skat.dk – tjek netværk eller prøv igen');
+      document.getElementById('results').innerHTML = `<div class="error-msg">⚠️ ${e.message}</div>`;
+    }
+  }
+
+  function setStatus(state, text) {
+    const dot = document.getElementById('statusDot');
+    dot.className = 'dot ' + state;
+    document.getElementById('statusText').textContent = text;
+  }
+
+  // --- Search ---
+  function doSearch() {
+    const query = document.getElementById('isinInput').value.trim().toUpperCase();
+    const out = document.getElementById('results');
+
+    if (!query) { out.innerHTML = ''; return; }
+
+    // Find ISIN column index
+    const isinCol = headers.findIndex(h => h.toUpperCase().includes('ISIN'));
+    if (isinCol === -1) {
+      out.innerHTML = `<div class="error-msg">Kunne ikke finde ISIN-kolonne i Excel-filen.</div>`;
+      return;
+    }
+
+    const matches = allRows.filter(row => String(row[isinCol]).trim().toUpperCase() === query);
+
+    if (matches.length === 0) {
+      out.innerHTML = `
+        <div class="not-found">
+          <div class="nf-title">Ingen funde fundet</div>
+          <div class="nf-sub">ISIN <strong>${query}</strong> er ikke på Skats positivliste (februar 2026).<br>
+          Kontrollér at ISIN-nummeret er korrekt og 12 tegn langt.</div>
+        </div>`;
+    } else if (matches.length === 1) {
+      out.innerHTML = buildSingleCard(matches[0]);
+    } else {
+      out.innerHTML = buildMultiTable(matches, query);
+    }
+  }
+
+  function buildSingleCard(row) {
+    // Try to identify useful columns
+    const nameCol = findCol(['navn', 'name', 'fond', 'fund', 'selskab']);
+    const isinCol = findCol(['isin']);
+    const countryCol = findCol(['land', 'country']);
+    const typeCol = findCol(['type', 'kategori', 'category', 'klasse', 'class']);
+    const yearCol = findCol(['år', 'year', 'gyldig', 'valid', 'periode', 'period']);
+    const currencyCol = findCol(['valuta', 'currency', 'mønt']);
+
+    const fields = [];
+
+    if (isinCol > -1) fields.push({ label: 'ISIN', value: row[isinCol], mono: true });
+    if (nameCol > -1) fields.push({ label: 'Fondsnavn', value: row[nameCol] });
+    if (countryCol > -1) fields.push({ label: 'Land', value: row[countryCol] });
+    if (typeCol > -1) fields.push({ label: 'Type', value: row[typeCol] });
+    if (currencyCol > -1) fields.push({ label: 'Valuta', value: row[currencyCol] });
+    if (yearCol > -1) fields.push({ label: 'Periode', value: row[yearCol] });
+
+    // Fill in any remaining non-empty columns not already shown
+    const shownCols = [isinCol, nameCol, countryCol, typeCol, currencyCol, yearCol].filter(c => c > -1);
+    headers.forEach((h, i) => {
+      if (!shownCols.includes(i) && String(row[i]).trim() !== '' && h.trim() !== '') {
+        fields.push({ label: h, value: row[i] });
+      }
+    });
+
+    const fundName = nameCol > -1 ? row[nameCol] : (row[1] || 'Ukendt fond');
+
+    const fieldHtml = fields.map(f => `
+      <div class="field">
+        <div class="field-label">${f.label}</div>
+        <div class="field-value ${f.mono ? 'mono' : ''}">${f.value || '—'}</div>
+      </div>`).join('');
+
+    return `
+      <div class="result-card">
+        <div class="result-header">
+          <div class="checkmark">
+            <svg viewBox="0 0 12 12"><polyline points="1.5,6 4.5,9 10.5,3"/></svg>
+          </div>
+          <div class="result-header-text">
+            <div class="fund-name">${fundName}</div>
+            <div class="on-list">✓ På Skats positivliste · Februar 2026</div>
+          </div>
+        </div>
+        <div class="fields">${fieldHtml}</div>
+      </div>`;
+  }
+
+  function buildMultiTable(matches, query) {
+    const isinCol = findCol(['isin']);
+    const nameCol = findCol(['navn', 'name', 'fond', 'fund', 'selskab']);
+
+    // Show all columns that have data
+    const usedCols = headers.map((h, i) => ({ h, i }))
+      .filter(({ h, i }) => h.trim() !== '' && matches.some(r => String(r[i]).trim() !== ''));
+
+    const ths = usedCols.map(c => `<th>${c.h}</th>`).join('');
+    const trs = matches.map(row => {
+      const tds = usedCols.map(c => `<td class="${c.i === isinCol ? 'mono' : ''}">${row[c.i] || '—'}</td>`).join('');
+      return `<tr>${tds}</tr>`;
+    }).join('');
+
+    return `
+      <div class="multi-result">
+        <div class="multi-header">Fandt <strong>${matches.length} poster</strong> for ISIN ${query} · alle på positivlisten</div>
+        <div style="overflow-x:auto">
+          <table><thead><tr>${ths}</tr></thead><tbody>${trs}</tbody></table>
+        </div>
+      </div>`;
+  }
+
+  function findCol(keywords) {
+    return headers.findIndex(h =>
+      keywords.some(k => h.toLowerCase().includes(k))
+    );
+  }
+
+  // Enter key triggers search
+  document.getElementById('isinInput').addEventListener('keydown', e => {
+    if (e.key === 'Enter') doSearch();
+  });
+
+  // Auto-uppercase as you type
+  document.getElementById('isinInput').addEventListener('input', e => {
+    const pos = e.target.selectionStart;
+    e.target.value = e.target.value.toUpperCase();
+    e.target.setSelectionRange(pos, pos);
+  });
+
+  loadData();
+</script>
+</body>
+</html>
